@@ -238,37 +238,111 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         end
 
+        # Helper to determine if a field is hidden
+        is_hidden? = fn field ->
+          case field.hidden do
+            true -> true
+            false -> false
+            nil -> false
+            fun when is_function(fun, 1) -> true
+          end
+        end
+
+        # Generates a render_form function that conditionally renders hidden input
+        # when the hidden option is a function
+        make_conditional_hidden_render = fn original_render_form ->
+          fn assigns ->
+            if AshBackpex.Fields.Hidden.hidden?(assigns.field_options, assigns) do
+              AshBackpex.Fields.Hidden.render_form(assigns)
+            else
+              if original_render_form do
+                original_render_form.(assigns)
+              else
+                # Let the field module handle it (return nil to use default)
+                assigns.field_options.module.render_form(assigns)
+              end
+            end
+          end
+        end
+
         @fields Spark.Dsl.Extension.get_entities(__MODULE__, [:backpex, :fields])
                 |> Enum.reverse()
                 |> Enum.reduce([], fn field, acc ->
                   module = field.module || field.attribute |> try_derive_module.()
 
-                  Keyword.put(
-                    acc,
-                    field.attribute,
-                    %{
-                      module: module,
-                      label: field.label || field.attribute |> atom_to_title_case.(),
-                      only: field.only,
-                      except: field.except,
-                      default: field.default,
-                      options: field.options || field.attribute |> maybe_derive_options.(module),
-                      display_field: field.display_field,
-                      live_resource: field.live_resource,
-                      panel: field.panel,
-                      searchable: field.searchable,
-                      link_assocs:
-                        case {module, Map.get(field, :link_assocs)} do
-                          {Backpex.Fields.HasMany, nil} -> true
-                          {Backpex.Fields.HasMany, true} -> true
-                          {Backpex.Fields.HasMany, false} -> false
-                          _ -> nil
-                        end
-                    }
+                  # Determine render_form based on hidden option
+                  render_form =
+                    case field.hidden do
+                      true ->
+                        # Always hidden - use hidden render
+                        &AshBackpex.Fields.Hidden.render_form/1
+
+                      fun when is_function(fun, 1) ->
+                        # Conditionally hidden - wrap with conditional logic
+                        make_conditional_hidden_render.(field.render_form)
+
+                      _ ->
+                        # Not hidden - use provided render_form or nil for default
+                        field.render_form
+                    end
+
+                  # Build the base field config with universally supported options
+                  base_config = %{
+                    module: module,
+                    label: field.label || field.attribute |> atom_to_title_case.(),
+                    # Core field options (supported by all field types)
+                    only: field.only,
+                    except: field.except,
+                    default: field.default,
+                    panel: field.panel,
+                    searchable: field.searchable,
+                    orderable: field.orderable,
+                    visible: field.visible,
+                    can?: field.can?,
+                    align: field.align,
+                    align_label: field.align_label,
+                    index_editable: field.index_editable,
+                    index_column_class: field.index_column_class,
+                    render: field.render,
+                    render_form: render_form,
+                    custom_alias: field.custom_alias,
+                    translate_error: field.translate_error
+                  }
+
+                  # Add field-type-specific options only if they're set
+                  # These are validated per-field-type by Backpex
+                  field_specific = %{
+                    # Select/MultiSelect fields
+                    options: field.options || field.attribute |> maybe_derive_options.(module),
+                    # Text/Number/Email/Textarea/URL fields
+                    placeholder: field.placeholder,
+                    debounce: field.debounce,
+                    throttle: field.throttle,
+                    # Relationship fields (BelongsTo, HasMany, HasManyThrough)
+                    display_field: field.display_field,
+                    display_field_form: field.display_field_form,
+                    live_resource: field.live_resource,
+                    options_query: field.options_query,
+                    prompt: field.prompt,
+                    # HasMany specific
+                    link_assocs:
+                      case {module, Map.get(field, :link_assocs)} do
+                        {Backpex.Fields.HasMany, nil} -> true
+                        {Backpex.Fields.HasMany, true} -> true
+                        {Backpex.Fields.HasMany, false} -> false
+                        _ -> nil
+                      end
+                  }
+
+                  # Merge and filter out nil values
+                  final_config =
+                    base_config
+                    |> Map.merge(field_specific)
                     |> Map.to_list()
                     |> Enum.reject(fn {k, v} -> is_nil(v) end)
                     |> Map.new()
-                  )
+
+                  Keyword.put(acc, field.attribute, final_config)
                 end)
 
         @filters Spark.Dsl.Extension.get_entities(__MODULE__, [:backpex, :filters])
@@ -293,6 +367,15 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
                           }
                         )
                       end)
+
+        @item_action_ash_actions Spark.Dsl.Extension.get_entities(__MODULE__, [:backpex, :item_actions])
+                                 |> Enum.reduce(%{}, fn action, acc ->
+                                   if action.ash_action do
+                                     Map.put(acc, action.name, action.ash_action)
+                                   else
+                                     acc
+                                   end
+                                 end)
 
         @item_action_strip_defaults Spark.Dsl.Extension.get_opt(
                                       __MODULE__,
@@ -406,6 +489,13 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         else
           def can?(_assigns, :delete, _item), do: false
+        end
+
+        def can?(assigns, action, item) do
+          case Map.get(@item_action_ash_actions, action) do
+            nil -> true
+            ash_action -> Ash.can?({item, ash_action}, Map.get(assigns, :current_user))
+          end
         end
 
         def maybe_default_options(assigns) do

@@ -33,6 +33,8 @@ defmodule AshBackpex.LiveResource.Dsl do
       :orderable,
       :visible,
       :can?,
+      :readonly,
+      :hidden,
       :panel,
       :index_editable,
       :index_column_class,
@@ -47,7 +49,13 @@ defmodule AshBackpex.LiveResource.Dsl do
       :placeholder,
       :options,
       :display_field,
-      :live_resource
+      :display_field_form,
+      :live_resource,
+      :link_assocs,
+      :options_query,
+      :prompt,
+      :format,
+      :rows
     ]
   end
 
@@ -98,6 +106,21 @@ defmodule AshBackpex.LiveResource.Dsl do
         readonly: [
           doc:
             "Sets the field to readonly. Also see the [panels](/guides/fields/readonly.md) guide.",
+          type: {:or, [:boolean, {:fun, 1}]}
+        ],
+        hidden: [
+          doc: """
+          Renders the field as a hidden input.
+
+          When set to `true`, the field will be rendered as a hidden HTML input instead of a
+          visible field component. This is useful for fields that need to be submitted with
+          the form but should not be editable by the user (e.g., foreign keys, system-generated values).
+
+          Unlike `visible: false` which completely removes the field from the form,
+          `hidden: true` keeps the field in the form submission while hiding it from view.
+
+          Can be a boolean or a function that receives assigns and returns a boolean.
+          """,
           type: {:or, [:boolean, {:fun, 1}]}
         ],
         panel: [
@@ -219,7 +242,7 @@ defmodule AshBackpex.LiveResource.Dsl do
     @moduledoc """
     Configuration options for `Backpex.ItemAction`
     """
-    defstruct [:name, :module]
+    defstruct [:name, :module, :ash_action]
   end
 
   @item_action %Spark.Dsl.Entity{
@@ -234,6 +257,12 @@ defmodule AshBackpex.LiveResource.Dsl do
          type: :module,
          required: true,
          doc: "The module to use for the item action. You must create the module"
+       ]},
+      {:ash_action,
+       [
+         type: :atom,
+         required: false,
+         doc: "The Ash action to check authorization against. If provided, can?/3 will use Ash.can? to determine visibility."
        ]}
     ]
   }
