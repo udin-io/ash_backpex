@@ -71,8 +71,6 @@ defmodule AshBackpex.MixProject do
       {:backpex, "~> 0.19.6"},
       {:spark, "~> 2.0"},
       {:phoenix_html, "~> 3.0 or ~> 4.0"},
-      {:igniter, "~> 0.8.2"},
-      {:ex_ast, "~> 0.13.1"},
 
       # Dev/Test dependencies
       {:faker, "~> 0.19.0", only: :test},

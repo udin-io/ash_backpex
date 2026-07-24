@@ -28,7 +28,6 @@ defmodule Demo.MixProject do
       {:decimal, "~> 3.0", override: true},
       {:tidewave, "~> 0.5", only: [:dev]},
       {:ash_backpex, path: "../"},
-      {:igniter, "~> 0.8.2"},
       {:ash, "~> 3.0"},
       {:ash_sqlite, "~> 0.2"},
       {:phoenix, "~> 1.7"},

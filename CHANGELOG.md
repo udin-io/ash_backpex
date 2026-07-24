@@ -6,7 +6,8 @@
 
 ### Fixes
 
-- Constrain `ex_ast` to the Elixir 1.18-compatible 0.13 release line.
+- Remove the unused runtime Igniter dependency and its transitive `ex_ast`
+  dependency.
 
 ## [v0.1.10]
 
