@@ -2,6 +2,12 @@
 
 <!-- changelog -->
 
+## [v0.1.11]
+
+### Fixes
+
+- Constrain `ex_ast` to the Elixir 1.18-compatible 0.13 release line.
+
 ## [v0.1.10]
 
 ### Updates

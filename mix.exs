@@ -1,7 +1,7 @@
 defmodule AshBackpex.MixProject do
   use Mix.Project
 
-  @version "0.1.10"
+  @version "0.1.11"
   @source_url "https://github.com/enoonan/ash_backpex"
 
   def project do
@@ -72,6 +72,7 @@ defmodule AshBackpex.MixProject do
       {:spark, "~> 2.0"},
       {:phoenix_html, "~> 3.0 or ~> 4.0"},
       {:igniter, "~> 0.8.2"},
+      {:ex_ast, "~> 0.13.1"},
 
       # Dev/Test dependencies
       {:faker, "~> 0.19.0", only: :test},
