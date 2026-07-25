@@ -263,12 +263,16 @@ defmodule TestInlineCrudLive do
         except [:index]
 
         child_fields do
-          field :body, Backpex.Fields.Textarea do
-            rows(4)
+          field :body do
             class("flex-1")
           end
 
-          field :approved, Backpex.Fields.Boolean
+          field :author do
+            display_field(:name)
+            typeahead(true)
+            typeahead_limit(5)
+            prompt("Choose an author")
+          end
         end
       end
     end

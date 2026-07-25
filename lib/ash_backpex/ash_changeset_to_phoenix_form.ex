@@ -87,6 +87,7 @@ defimpl Phoenix.HTML.FormData, for: Ash.Changeset do
 
     id = to_string(id || form.id <> "_#{field}")
     name = to_string(name || form.name <> "[#{field}]")
+    opts = put_nested_resource(opts, changeset.resource, field)
 
     field_string = field_to_string(field)
     params = get_in(form.params, [field_string])
@@ -165,6 +166,26 @@ defimpl Phoenix.HTML.FormData, for: Ash.Changeset do
   end
 
   # Private helper functions
+
+  defp put_nested_resource(opts, resource, field) do
+    case Ash.Resource.Info.relationship(resource, field) do
+      %{destination: destination} ->
+        Keyword.put(opts, :ash_resource, destination)
+
+      nil ->
+        case Ash.Resource.Info.attribute(resource, field) do
+          %{type: {:array, type}} -> maybe_put_nested_resource(opts, type)
+          %{type: type} -> maybe_put_nested_resource(opts, type)
+          nil -> opts
+        end
+    end
+  end
+
+  defp maybe_put_nested_resource(opts, resource) do
+    if Ash.Resource.Info.resource?(resource),
+      do: Keyword.put(opts, :ash_resource, resource),
+      else: opts
+  end
 
   defp nested_entries(nil, default), do: Enum.map(default, &{&1, %{}})
   defp nested_entries(params, _default), do: Enum.map(params, &{nil, &1})

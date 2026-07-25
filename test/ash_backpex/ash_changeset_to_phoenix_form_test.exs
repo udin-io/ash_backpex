@@ -22,6 +22,7 @@ defmodule AshBackpex.AshChangesetToPhoenixFormTest do
              Phoenix.HTML.FormData.to_form(changeset, form, :comments, [])
 
     assert nested_form.data == comment
+    assert nested_form.options[:ash_resource] == Comment
     assert nested_form.hidden == [id: comment.id]
     assert Phoenix.HTML.Form.input_value(nested_form, :body) == "First"
     assert Phoenix.HTML.Form.input_value(nested_form, :author_id) == comment_author_id
@@ -39,6 +40,7 @@ defmodule AshBackpex.AshChangesetToPhoenixFormTest do
 
     nested_forms = Phoenix.HTML.FormData.to_form(changeset, form, :comments, default: [])
 
+    assert Enum.all?(nested_forms, &(&1.options[:ash_resource] == Comment))
     assert Enum.map(nested_forms, & &1.params["body"]) == ["First", "Second"]
   end
 

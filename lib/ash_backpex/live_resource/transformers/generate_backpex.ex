@@ -141,8 +141,8 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           |> Enum.map_join(" ", &String.capitalize/1)
         end
 
-        get_one_of_constraint = fn attribute_name ->
-          case Ash.Resource.Info.attribute(@resource, attribute_name) do
+        get_one_of_constraint = fn resource, attribute_name ->
+          case Ash.Resource.Info.attribute(resource, attribute_name) do
             %{constraints: constraints} ->
               case Keyword.get(constraints, :items) do
                 items when is_list(items) -> Keyword.get(items, :one_of, nil)
@@ -154,46 +154,46 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         end
 
-        has_one_of_constraint = fn attribute_name ->
-          get_one_of_constraint.(attribute_name) |> is_list
+        has_one_of_constraint = fn resource, attribute_name ->
+          get_one_of_constraint.(resource, attribute_name) |> is_list
         end
 
-        select_or = fn attribute_name, default ->
-          if attribute_name |> has_one_of_constraint.() do
+        select_or = fn resource, attribute_name, default ->
+          if has_one_of_constraint.(resource, attribute_name) do
             Backpex.Fields.Select
           else
             default
           end
         end
 
-        derive_type = fn attribute_name ->
+        derive_type = fn resource, attribute_name ->
           cond do
-            !is_nil(Ash.Resource.Info.attribute(@resource, attribute_name)) ->
-              Ash.Resource.Info.attribute(@resource, attribute_name).type
+            !is_nil(Ash.Resource.Info.attribute(resource, attribute_name)) ->
+              Ash.Resource.Info.attribute(resource, attribute_name).type
 
-            !is_nil(Ash.Resource.Info.relationship(@resource, attribute_name)) ->
-              Ash.Resource.Info.relationship(@resource, attribute_name).type
+            !is_nil(Ash.Resource.Info.relationship(resource, attribute_name)) ->
+              Ash.Resource.Info.relationship(resource, attribute_name).type
 
-            !is_nil(Ash.Resource.Info.calculation(@resource, attribute_name)) ->
-              Ash.Resource.Info.calculation(@resource, attribute_name).type
+            !is_nil(Ash.Resource.Info.calculation(resource, attribute_name)) ->
+              Ash.Resource.Info.calculation(resource, attribute_name).type
 
-            !is_nil(Ash.Resource.Info.aggregate(@resource, attribute_name)) ->
-              Ash.Resource.Info.aggregate(@resource, attribute_name).kind
+            !is_nil(Ash.Resource.Info.aggregate(resource, attribute_name)) ->
+              Ash.Resource.Info.aggregate(resource, attribute_name).kind
 
             true ->
               att = inspect(attribute_name)
 
-              module_shortname =
-                __MODULE__ |> Atom.to_string() |> String.split(".") |> List.last()
+              resource_shortname =
+                resource |> Atom.to_string() |> String.split(".") |> List.last()
 
               raise """
 
-              Unable to derive the `Backpex.Field` module for the #{att} field in #{module_shortname}.
+              Unable to derive the `Backpex.Field` module for the #{att} field in #{resource_shortname}.
 
               To debug:
 
                 * Ensure #{att} is spelled correctly, and is a valid attribute, relation,
-                  calculation, aggregate or other loadable entity on the #{module_shortname} resource.
+                  calculation, aggregate or other loadable entity on the #{resource_shortname} resource.
 
                 * If a default field module still cannot be derived, specify it manually by using the `module` macro. E.g.:
 
@@ -206,10 +206,10 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         end
 
-        multiselect_or = fn attribute_name, default ->
-          case derive_type.(attribute_name) do
+        multiselect_or = fn resource, attribute_name, default ->
+          case derive_type.(resource, attribute_name) do
             {:array, Ash.Type.Atom} ->
-              if attribute_name |> has_one_of_constraint.() do
+              if has_one_of_constraint.(resource, attribute_name) do
                 Backpex.Fields.MultiSelect
               else
                 default
@@ -325,16 +325,16 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         end
 
-        get_constraints = fn attribute_name ->
-          case Ash.Resource.Info.attribute(@resource, attribute_name) do
+        get_constraints = fn resource, attribute_name ->
+          case Ash.Resource.Info.attribute(resource, attribute_name) do
             %{constraints: constraints} -> constraints
             _ -> []
           end
         end
 
-        try_derive_module = fn attribute_name ->
-          type = derive_type.(attribute_name)
-          constraints = get_constraints.(attribute_name)
+        try_derive_module = fn resource, attribute_name ->
+          type = derive_type.(resource, attribute_name)
+          constraints = get_constraints.(resource, attribute_name)
 
           # Check custom mappings first, then fall back to defaults
           case lookup_custom_mapping.(type, constraints, attribute_name) do
@@ -344,13 +344,13 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
                   Backpex.Fields.Boolean
 
                 Ash.Type.String ->
-                  attribute_name |> select_or.(Backpex.Fields.Text)
+                  select_or.(resource, attribute_name, Backpex.Fields.Text)
 
                 Ash.Type.Atom ->
-                  attribute_name |> select_or.(Backpex.Fields.Text)
+                  select_or.(resource, attribute_name, Backpex.Fields.Text)
 
                 Ash.Type.CiString ->
-                  attribute_name |> select_or.(Backpex.Fields.Text)
+                  select_or.(resource, attribute_name, Backpex.Fields.Text)
 
                 Ash.Type.Time ->
                   Backpex.Fields.Time
@@ -371,10 +371,10 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
                   Backpex.Fields.DateTime
 
                 Ash.Type.Integer ->
-                  attribute_name |> select_or.(Backpex.Fields.Number)
+                  select_or.(resource, attribute_name, Backpex.Fields.Number)
 
                 Ash.Type.Float ->
-                  attribute_name |> select_or.(Backpex.Fields.Number)
+                  select_or.(resource, attribute_name, Backpex.Fields.Number)
 
                 :belongs_to ->
                   Backpex.Fields.BelongsTo
@@ -404,19 +404,19 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
                   Backpex.Fields.Number
 
                 {:array, Ash.Type.Atom} ->
-                  attribute_name |> multiselect_or.(Backpex.Fields.Text)
+                  multiselect_or.(resource, attribute_name, Backpex.Fields.Text)
 
                 {:array, Ash.Type.String} ->
-                  attribute_name |> multiselect_or.(Backpex.Fields.Text)
+                  multiselect_or.(resource, attribute_name, Backpex.Fields.Text)
 
                 {:array, Ash.Type.CiString} ->
-                  attribute_name |> multiselect_or.(Backpex.Fields.Text)
+                  multiselect_or.(resource, attribute_name, Backpex.Fields.Text)
 
                 {:array, Ash.Type.Integer} ->
-                  attribute_name |> multiselect_or.(Backpex.Fields.Number)
+                  multiselect_or.(resource, attribute_name, Backpex.Fields.Number)
 
                 {:array, Ash.Type.Float} ->
-                  attribute_name |> multiselect_or.(Backpex.Fields.Number)
+                  multiselect_or.(resource, attribute_name, Backpex.Fields.Number)
               end
 
             custom_module ->
@@ -424,10 +424,10 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         end
 
-        maybe_derive_options = fn attribute_name, module ->
+        maybe_derive_options = fn resource, attribute_name, module ->
           case module do
             Backpex.Fields.Select ->
-              case attribute_name |> get_one_of_constraint.() do
+              case get_one_of_constraint.(resource, attribute_name) do
                 constraints when is_list(constraints) ->
                   constraints
                   |> Enum.map(fn val ->
@@ -439,7 +439,7 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
               end
 
             Backpex.Fields.MultiSelect ->
-              case attribute_name |> get_one_of_constraint.() do
+              case get_one_of_constraint.(resource, attribute_name) do
                 [_ | _] -> &__MODULE__.maybe_default_options/1
                 _ -> []
               end
@@ -449,7 +449,7 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         end
 
-        maybe_derive_options_query = fn attribute_name, module ->
+        maybe_derive_options_query = fn resource, attribute_name, module ->
           case module do
             relationship_module
             when relationship_module in [
@@ -457,8 +457,8 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
                    Backpex.Fields.BelongsTo,
                    Backpex.Fields.HasMany
                  ] ->
-              if AshBackpex.RelationshipOptions.options_query?(@resource, attribute_name) do
-                attribute_name
+              if AshBackpex.RelationshipOptions.options_query?(resource, attribute_name) do
+                {resource, attribute_name}
               end
 
             _ ->
@@ -468,28 +468,28 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
 
         # Derive the appropriate AshBackpex filter module from an Ash attribute type
         derive_filter_module = fn attribute_name ->
-          type = derive_type.(attribute_name)
+          type = derive_type.(@resource, attribute_name)
 
           case type do
             Ash.Type.Boolean ->
               AshBackpex.Filters.Boolean
 
             Ash.Type.Atom ->
-              if attribute_name |> has_one_of_constraint.() do
+              if has_one_of_constraint.(@resource, attribute_name) do
                 AshBackpex.Filters.Select
               else
                 nil
               end
 
             Ash.Type.String ->
-              if attribute_name |> has_one_of_constraint.() do
+              if has_one_of_constraint.(@resource, attribute_name) do
                 AshBackpex.Filters.Select
               else
                 nil
               end
 
             Ash.Type.CiString ->
-              if attribute_name |> has_one_of_constraint.() do
+              if has_one_of_constraint.(@resource, attribute_name) do
                 AshBackpex.Filters.Select
               else
                 nil
@@ -520,14 +520,14 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
               AshBackpex.Filters.Range
 
             {:array, Ash.Type.Atom} ->
-              if attribute_name |> has_one_of_constraint.() do
+              if has_one_of_constraint.(@resource, attribute_name) do
                 AshBackpex.Filters.MultiSelect
               else
                 nil
               end
 
             {:array, Ash.Type.String} ->
-              if attribute_name |> has_one_of_constraint.() do
+              if has_one_of_constraint.(@resource, attribute_name) do
                 AshBackpex.Filters.MultiSelect
               else
                 nil
@@ -541,7 +541,7 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
         # Derive the filter type for Range filters (used by Backpex.Filters.Range type/0 callback)
         # Returns :number for numeric types, :date for dates, :datetime for datetimes
         derive_filter_type = fn attribute_name ->
-          type = derive_type.(attribute_name)
+          type = derive_type.(@resource, attribute_name)
 
           case type do
             Ash.Type.Integer -> :number
@@ -561,7 +561,7 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
         derive_filter_options = fn attribute_name, filter_module ->
           case filter_module do
             AshBackpex.Filters.Select ->
-              case attribute_name |> get_one_of_constraint.() do
+              case get_one_of_constraint.(@resource, attribute_name) do
                 constraints when is_list(constraints) ->
                   constraints
                   |> Enum.map(fn val ->
@@ -573,7 +573,7 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
               end
 
             AshBackpex.Filters.MultiSelect ->
-              case attribute_name |> get_one_of_constraint.() do
+              case get_one_of_constraint.(@resource, attribute_name) do
                 constraints when is_list(constraints) ->
                   constraints
                   |> Enum.map(fn val ->
@@ -589,117 +589,130 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
           end
         end
 
+        child_resource = fn resource, field ->
+          case Ash.Resource.Info.relationship(resource, field.attribute) do
+            %{destination: destination} ->
+              destination
+
+            nil ->
+              case Ash.Resource.Info.attribute(resource, field.attribute) do
+                %{type: {:array, type}} ->
+                  if Ash.Resource.Info.resource?(type), do: type
+
+                %{type: type} ->
+                  if Ash.Resource.Info.resource?(type), do: type
+
+                nil ->
+                  nil
+              end
+          end
+        end
+
+        transform_field = fn transform_field, field, resource, nested? ->
+          module =
+            case field.module do
+              nil when is_nil(resource) ->
+                raise Spark.Error.DslError,
+                  module: __MODULE__,
+                  message:
+                    "Unable to derive the module for nested field #{inspect(field.attribute)} because its parent field does not resolve to an Ash resource"
+
+              nil ->
+                try_derive_module.(resource, field.attribute)
+
+              module ->
+                module
+            end
+
+          inline_crud? =
+            module in [AshBackpex.Fields.InlineCRUD, Backpex.Fields.InlineCRUD]
+
+          belongs_to? =
+            module in [AshBackpex.Fields.BelongsTo, Backpex.Fields.BelongsTo]
+
+          can_typeahead? = field.typeahead == true && belongs_to?
+
+          if field.typeahead == true && not can_typeahead? do
+            raise Spark.Error.DslError,
+              module: __MODULE__,
+              message:
+                "`typeahead true` is only supported on belongs_to fields using Backpex.Fields.BelongsTo or AshBackpex.Fields.BelongsTo"
+          end
+
+          output_module =
+            cond do
+              inline_crud? -> AshBackpex.Fields.InlineCRUD
+              can_typeahead? || (nested? && belongs_to?) -> AshBackpex.Fields.BelongsTo
+              true -> module
+            end
+
+          type =
+            Map.get(field, :type) ||
+              if inline_crud? && derive_type.(resource, field.attribute) == :has_many,
+                do: :assoc
+
+          child_fields =
+            case field.child_fields do
+              nil ->
+                nil
+
+              %{fields: child_fields} ->
+                nested_resource = child_resource.(resource, field)
+
+                Enum.map(child_fields, fn child ->
+                  transform_field.(transform_field, child, nested_resource, true)
+                end)
+            end
+
+          derived_options_query =
+            cond do
+              Map.get(field, :options_query) ->
+                nil
+
+              can_typeahead? ->
+                {resource, field.attribute}
+
+              true ->
+                maybe_derive_options_query.(resource, field.attribute, module)
+            end
+
+          options =
+            Map.get(field, :options) ||
+              maybe_derive_options.(resource, field.attribute, module)
+
+          link_assocs =
+            case {module, Map.get(field, :link_assocs)} do
+              {Backpex.Fields.HasMany, nil} -> true
+              {Backpex.Fields.HasMany, true} -> true
+              {Backpex.Fields.HasMany, false} -> false
+              _ -> nil
+            end
+
+          config =
+            field
+            |> Map.from_struct()
+            |> Map.drop([:attribute, :__spark_metadata__])
+            |> Map.merge(%{
+              module: output_module,
+              label: field.label || atom_to_title_case.(field.attribute),
+              type: type,
+              child_fields: child_fields,
+              options: options,
+              link_assocs: link_assocs,
+              typeahead: if(can_typeahead?, do: true),
+              typeahead_limit: if(can_typeahead?, do: Map.get(field, :typeahead_limit)),
+              __ash_backpex_options_query__: derived_options_query
+            })
+            |> Map.reject(fn {_key, value} -> is_nil(value) end)
+
+          {field.attribute, config}
+        end
+
         @fields Spark.Dsl.Extension.get_entities(__MODULE__, [:backpex, :fields])
                 |> Enum.reverse()
-                |> Enum.reduce([], fn field, acc ->
-                  module = field.module || field.attribute |> try_derive_module.()
-
-                  inline_crud? =
-                    module in [AshBackpex.Fields.InlineCRUD, Backpex.Fields.InlineCRUD]
-
-                  can_typeahead? =
-                    field.typeahead == true &&
-                      module in [AshBackpex.Fields.BelongsTo, Backpex.Fields.BelongsTo]
-
-                  if field.typeahead == true && not can_typeahead? do
-                    raise Spark.Error.DslError,
-                      module: __MODULE__,
-                      message:
-                        "`typeahead true` is only supported on belongs_to fields using Backpex.Fields.BelongsTo or AshBackpex.Fields.BelongsTo"
-                  end
-
-                  type =
-                    Map.get(field, :type) ||
-                      if inline_crud? && derive_type.(field.attribute) == :has_many,
-                        do: :assoc
-
-                  child_fields =
-                    case field.child_fields do
-                      nil ->
-                        nil
-
-                      %{fields: child_fields} ->
-                        Enum.map(child_fields, fn child ->
-                          options =
-                            child
-                            |> Map.from_struct()
-                            |> Map.drop([:attribute, :child_fields, :__spark_metadata__])
-                            |> Map.put(
-                              :label,
-                              child.label || atom_to_title_case.(child.attribute)
-                            )
-                            |> Map.reject(fn {_key, value} -> is_nil(value) end)
-
-                          {child.attribute, options}
-                        end)
-                    end
-
-                  Keyword.put(
-                    acc,
-                    field.attribute,
-                    %{
-                      module:
-                        cond do
-                          inline_crud? -> AshBackpex.Fields.InlineCRUD
-                          can_typeahead? -> AshBackpex.Fields.BelongsTo
-                          true -> module
-                        end,
-                      label: field.label || field.attribute |> atom_to_title_case.(),
-                      only: field.only,
-                      except: field.except,
-                      default: field.default,
-                      render: field.render,
-                      render_form: field.render_form,
-                      custom_alias: field.custom_alias,
-                      align: field.align,
-                      align_label: field.align_label,
-                      orderable: field.orderable,
-                      visible: field.visible,
-                      can?: field.can?,
-                      index_editable: field.index_editable,
-                      index_column_class: field.index_column_class,
-                      translate_error: field.translate_error,
-                      help_text: field.help_text,
-                      debounce: field.debounce,
-                      throttle: field.throttle,
-                      placeholder: field.placeholder,
-                      prompt: Map.get(field, :prompt),
-                      readonly: Map.get(field, :readonly),
-                      display_field_form: Map.get(field, :display_field_form),
-                      options_query: Map.get(field, :options_query),
-                      typeahead: if(can_typeahead?, do: true),
-                      typeahead_limit: if(can_typeahead?, do: Map.get(field, :typeahead_limit)),
-                      __ash_backpex_options_query__:
-                        if Map.get(field, :options_query) do
-                          nil
-                        else
-                          if can_typeahead? do
-                            field.attribute
-                          else
-                            maybe_derive_options_query.(field.attribute, module)
-                          end
-                        end,
-                      format: Map.get(field, :format),
-                      rows: Map.get(field, :rows),
-                      options: field.options || field.attribute |> maybe_derive_options.(module),
-                      display_field: field.display_field,
-                      live_resource: field.live_resource,
-                      type: type,
-                      child_fields: child_fields,
-                      panel: field.panel,
-                      searchable: field.searchable,
-                      link_assocs:
-                        case {module, Map.get(field, :link_assocs)} do
-                          {Backpex.Fields.HasMany, nil} -> true
-                          {Backpex.Fields.HasMany, true} -> true
-                          {Backpex.Fields.HasMany, false} -> false
-                          _ -> nil
-                        end
-                    }
-                    |> Map.to_list()
-                    |> Enum.reject(fn {k, v} -> is_nil(v) end)
-                    |> Map.new()
-                  )
+                |> Enum.reduce([], fn field, fields ->
+                  {attribute, config} = transform_field.(transform_field, field, @resource, false)
+                  Keyword.put(fields, attribute, config)
                 end)
 
         @filters Spark.Dsl.Extension.get_entities(__MODULE__, [:backpex, :filters])
@@ -711,7 +724,7 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
                    # and no explicit module was provided
                    if is_nil(module) do
                      att = inspect(filter.attribute)
-                     type = derive_type.(filter.attribute)
+                     type = derive_type.(@resource, filter.attribute)
 
                      module_shortname =
                        __MODULE__ |> Atom.to_string() |> String.split(".") |> List.last()
@@ -828,25 +841,40 @@ defmodule AshBackpex.LiveResource.Transformers.GenerateBackpex do
 
         @impl Backpex.LiveResource
         def fields do
-          Enum.map(@fields, fn
-            {attribute, %{__ash_backpex_options_query__: relationship_name} = config} ->
-              config =
-                config
-                |> Map.delete(:__ash_backpex_options_query__)
-                |> Map.put(:options_query, fn query, assigns ->
-                  AshBackpex.RelationshipOptions.apply_options_query(
-                    @resource,
-                    relationship_name,
-                    query,
-                    assigns
+          finalize_field = fn finalize_field, {attribute, config} ->
+            config =
+              case Map.pop(config, :__ash_backpex_options_query__) do
+                {nil, config} ->
+                  config
+
+                {{resource, relationship_name}, config} ->
+                  Map.put(config, :options_query, fn query, assigns ->
+                    AshBackpex.RelationshipOptions.apply_options_query(
+                      resource,
+                      relationship_name,
+                      query,
+                      assigns
+                    )
+                  end)
+              end
+
+            config =
+              case Map.fetch(config, :child_fields) do
+                {:ok, child_fields} ->
+                  Map.put(
+                    config,
+                    :child_fields,
+                    Enum.map(child_fields, &finalize_field.(finalize_field, &1))
                   )
-                end)
 
-              {attribute, config}
+                :error ->
+                  config
+              end
 
-            field ->
-              field
-          end)
+            {attribute, config}
+          end
+
+          Enum.map(@fields, &finalize_field.(finalize_field, &1))
         end
 
         @impl Backpex.LiveResource

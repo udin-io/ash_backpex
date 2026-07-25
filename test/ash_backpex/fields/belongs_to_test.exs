@@ -4,7 +4,7 @@ defmodule AshBackpex.Fields.BelongsToTest do
   import Phoenix.LiveViewTest
 
   alias AshBackpex.Fields.BelongsTo
-  alias AshBackpex.TestDomain.{Post, User}
+  alias AshBackpex.TestDomain.{Comment, Post, User}
 
   setup do
     previous_translator = Application.get_env(:backpex, :translator_function)
@@ -47,11 +47,13 @@ defmodule AshBackpex.Fields.BelongsToTest do
         name: :author,
         field_options: %{
           label: "Author",
+          typeahead: true,
           typeahead_limit: 5
         },
         hide_label: false,
         readonly: false,
         search_input: "",
+        search_name: "resource-form_author_id_search",
         selected: {"Ada Lovelace", "selected-id"},
         selected_id: "selected-id",
         option_ids: ["selected-id"],
@@ -64,11 +66,54 @@ defmodule AshBackpex.Fields.BelongsToTest do
       })
 
     assert html =~ ~s(type="search")
+    assert html =~ ~s(name="resource-form_author_id_search")
     assert html =~ ~s(type="radio")
     assert html =~ ~s(name="change[author_id]")
     assert html =~ ~s(value="")
     refute html =~ "detached-form"
     refute html =~ "Type at least"
+  end
+
+  test "uses the child resource and nested input name inside InlineCRUD" do
+    field_options = TestInlineCrudLive.fields()[:comments].child_fields[:author]
+    post = %Post{id: Ash.UUID.generate(), title: "Post", comments: []}
+    changeset = Ash.Changeset.for_update(post, :update, %{})
+    parent_form = Phoenix.Component.to_form(changeset, as: :change)
+
+    parent_form = %{
+      parent_form
+      | params: %{"comments" => [%{"author_id" => ""}]}
+    }
+
+    assert [form] =
+             Phoenix.HTML.FormData.to_form(changeset, parent_form, :comments, default: [])
+
+    assert form.options[:ash_resource] == Comment
+
+    assigns = %{
+      type: :form,
+      name: :author,
+      field: {:author, field_options},
+      field_options: field_options,
+      live_resource: TestInlineCrudLive,
+      form: form
+    }
+
+    assert {:ok, socket} = BelongsTo.update(assigns, component_socket())
+    assert socket.assigns.queryable == User
+    assert socket.assigns.owner_key == :author_id
+
+    html =
+      render_component(
+        &BelongsTo.render_form/1,
+        Map.merge(socket.assigns, %{
+          hide_label: false,
+          readonly: false,
+          myself: %Phoenix.LiveComponent.CID{cid: 1}
+        })
+      )
+
+    assert html =~ ~s(name="change[comments][0][author_id]")
   end
 
   test "searches the display field case-insensitively and limits results" do
@@ -199,7 +244,7 @@ defmodule AshBackpex.Fields.BelongsToTest do
   end
 
   defp search(socket, search_input) do
-    params = %{"#{socket.assigns.name}_search" => search_input}
+    params = %{socket.assigns.search_name => search_input}
     assert {:noreply, socket} = BelongsTo.handle_event("search", params, socket)
     socket
   end

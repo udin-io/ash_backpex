@@ -12,7 +12,7 @@ defmodule AshBackpex.Fields.BelongsTo do
                      typeahead: [
                        doc: "Use the server-backed typeahead form.",
                        type: :boolean,
-                       default: true
+                       default: false
                      ],
                      typeahead_limit: [
                        doc: "Maximum number of matching options returned by a search.",
@@ -32,7 +32,15 @@ defmodule AshBackpex.Fields.BelongsTo do
   @impl Phoenix.LiveComponent
   def update(assigns, socket) do
     %{name: name, field: field} = assigns
-    schema = assigns.live_resource.adapter_config(:schema)
+
+    schema =
+      case assigns do
+        %{form: %{options: options}} ->
+          Keyword.get(options, :ash_resource)
+
+        _assigns ->
+          nil
+      end || assigns.live_resource.adapter_config(:schema)
 
     %{
       queryable: queryable,
@@ -55,17 +63,24 @@ defmodule AshBackpex.Fields.BelongsTo do
   end
 
   defp apply_action(socket, :form) do
-    %{assigns: %{field_options: field_options} = assigns} = socket
+    if socket.assigns.field_options.typeahead do
+      %{assigns: %{field_options: field_options} = assigns} = socket
 
-    socket
-    |> assign_new(:prompt, fn -> prompt(assigns, field_options) end)
-    |> assign_new(:not_found_text, fn ->
-      Backpex.__("No options found", socket.assigns.live_resource)
-    end)
-    |> assign_new(:search_input, fn -> "" end)
-    |> assign_initial_options()
-    |> assign_selected()
-    |> assign_form_errors()
+      socket
+      |> assign_new(:prompt, fn -> prompt(assigns, field_options) end)
+      |> assign_new(:not_found_text, fn ->
+        Backpex.__("No options found", socket.assigns.live_resource)
+      end)
+      |> assign_new(:search_name, fn ->
+        "#{socket.assigns.form[socket.assigns.owner_key].id}_search"
+      end)
+      |> assign_new(:search_input, fn -> "" end)
+      |> assign_initial_options()
+      |> assign_selected()
+      |> assign_form_errors()
+    else
+      socket
+    end
   end
 
   defp apply_action(socket, _type), do: socket
@@ -75,17 +90,25 @@ defmodule AshBackpex.Fields.BelongsTo do
 
   @impl Backpex.Field
   def render_form(assigns) do
+    if Map.get(assigns.field_options, :typeahead, false) do
+      render_typeahead_form(assigns)
+    else
+      Backpex.Fields.BelongsTo.render_form(assigns)
+    end
+  end
+
+  defp render_typeahead_form(assigns) do
     assigns = assign(assigns, :help_text, Backpex.Field.help_text(assigns.field_options, assigns))
 
     ~H"""
-    <div id={"belongs-to-typeahead-#{@name}"}>
+    <div id={"belongs-to-typeahead-#{@form[@owner_key].id}"}>
       <Layout.field_container>
         <:label :if={not @hide_label} align={Backpex.Field.align_label(@field_options, assigns)}>
           <Layout.input_label as="span" text={@field_options[:label]} />
         </:label>
 
         <Backpex.HTML.CoreComponents.dropdown
-          id={"belongs-to-typeahead-dropdown-#{@name}"}
+          id={"belongs-to-typeahead-dropdown-#{@form[@owner_key].id}"}
           class="w-full"
         >
           <:trigger
@@ -126,7 +149,7 @@ defmodule AshBackpex.Fields.BelongsTo do
             <div class="max-h-72 p-2">
               <input
                 type="search"
-                name={"#{@name}_search"}
+                name={@search_name}
                 class="input input-sm mb-2 w-full"
                 placeholder={Backpex.__("Search", @live_resource)}
                 value={@search_input}
@@ -206,7 +229,7 @@ defmodule AshBackpex.Fields.BelongsTo do
 
   @impl Phoenix.LiveComponent
   def handle_event("search", params, socket) do
-    search_input = Map.get(params, "#{socket.assigns.name}_search", "")
+    search_input = Map.get(params, socket.assigns.search_name, "")
 
     socket
     |> assign(:search_input, search_input)

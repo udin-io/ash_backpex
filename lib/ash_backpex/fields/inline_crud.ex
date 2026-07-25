@@ -31,6 +31,7 @@ defmodule AshBackpex.Fields.InlineCRUD do
 
         <div class="flex flex-col">
           <.inputs_for :let={f_nested} field={@form[@name]}>
+            <% f_nested = stable_child_form(f_nested) %>
             <input type="hidden" name={"change[#{@name}_order][]"} value={f_nested.index} tabindex="-1" aria-hidden="true" />
 
             <div
@@ -170,6 +171,27 @@ defmodule AshBackpex.Fields.InlineCRUD do
 
   defp move_label("up", live_resource), do: Backpex.__("Move up", live_resource)
   defp move_label("down", live_resource), do: Backpex.__("Move down", live_resource)
+
+  defp stable_child_form(%{params: %{"_persistent_id" => persistent_id}} = form) do
+    persistent_suffix = "_#{persistent_id}"
+    indexed_suffix = "#{persistent_suffix}_#{form.index}"
+
+    stable_id =
+      cond do
+        String.ends_with?(form.id, indexed_suffix) ->
+          String.replace_suffix(form.id, "_#{form.index}", "")
+
+        String.ends_with?(form.id, persistent_suffix) ->
+          form.id
+
+        true ->
+          "#{form.id}#{persistent_suffix}"
+      end
+
+    %{form | id: stable_id}
+  end
+
+  defp stable_child_form(form), do: form
 
   @impl Backpex.Field
   defdelegate association?(field), to: Backpex.Fields.InlineCRUD

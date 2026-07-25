@@ -144,19 +144,22 @@ defmodule DemoWeb.PostLive do
             class("inline-crud-comment-body")
           end
 
-          field :author, Backpex.Fields.BelongsTo do
+          field :author do
             label("Author")
             display_field(:name)
+            typeahead(true)
+            typeahead_limit(10)
+            prompt("Choose an author")
             class("w-56")
           end
 
-          field :sentiment, Backpex.Fields.Select do
+          field :sentiment do
             label("Sentiment")
             options(Positive: :positive, Neutral: :neutral, Critical: :critical)
             class("w-40")
           end
 
-          field :approved, Backpex.Fields.Boolean do
+          field :approved do
             label("Approved")
             class("w-28")
           end

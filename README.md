@@ -20,7 +20,7 @@ Add `ash_backpex` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ash_backpex, "~> 0.1.11"}
+    {:ash_backpex, "~> 0.1.12"}
   ]
 end
 ```
@@ -97,18 +97,26 @@ field :rows do
   except [:index]
 
   child_fields do
-    field :title, Backpex.Fields.Text
+    field :title
+
     field :config, Backpex.Fields.Textarea do
       label "Configuration"
+    end
+
+    field :category do
+      display_field :name
+      typeahead true
     end
   end
 end
 ```
 
-AshBackpex derives `type: :assoc`, adds move-up and move-down controls,
-translates the add/delete/order form parameters to an ordered list for Ash,
-and preserves child primary keys for updates. The parent Ash actions must
-expose an array-of-maps argument and use `manage_relationship`, typically with
+AshBackpex derives child modules and relationship options from the related
+child resource using the same rules as top-level fields. It also derives
+`type: :assoc`, adds move-up and move-down controls, translates the
+add/delete/order form parameters to an ordered list for Ash, and preserves
+child primary keys for updates. The parent Ash actions must expose an
+array-of-maps argument and use `manage_relationship`, typically with
 `type: :direct_control`.
 
 See the [Inline CRUD guide](guides/inline-crud.md) for the complete resource and

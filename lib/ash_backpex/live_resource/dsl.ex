@@ -497,13 +497,10 @@ defmodule AshBackpex.LiveResource.Dsl do
 
   @child_field %Spark.Dsl.Entity{
     name: :field,
-    args: [:attribute, :module],
+    args: [:attribute, {:optional, :module}],
     target: AshBackpex.LiveResource.Dsl.Field,
     describe: "Configures a field rendered inside an InlineCRUD child form.",
-    schema:
-      Keyword.update!(@field_schema, :module, fn options ->
-        Keyword.put(options, :required, true)
-      end)
+    schema: @field_schema
   }
 
   @child_fields %Spark.Dsl.Entity{

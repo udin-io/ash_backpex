@@ -119,13 +119,20 @@ field :rows do
   except [:index]
 
   child_fields do
-    field :title, Backpex.Fields.Text
-    field :position, Backpex.Fields.Number
+    field :title
+    field :position
+
+    field :category do
+      display_field :name
+      typeahead true
+    end
   end
 end
 ```
 
-AshBackpex derives `type: :assoc` for a `has_many`, adds move-up and move-down
+AshBackpex derives each child field against the related child resource using
+the same module, option, and relationship-query derivation as top-level fields.
+It also derives `type: :assoc` for a `has_many`, adds move-up and move-down
 controls, normalizes InlineCRUD's order and delete parameters to an ordered
 list, and includes existing child primary keys in hidden inputs. The parent
 create/update action must accept an `{:array, :map}` argument and connect it to

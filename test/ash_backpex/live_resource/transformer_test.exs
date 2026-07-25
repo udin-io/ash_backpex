@@ -127,7 +127,7 @@ defmodule AshBackpex.LiveResource.TransformerTest do
       assert validated_field.typeahead
     end
 
-    test "support InlineCRUD as an opt-in has_many field" do
+    test "recursively derives InlineCRUD child fields against the child resource" do
       field = TestInlineCrudLive.fields()[:comments]
       validated_field = Backpex.LiveResource.fields(TestInlineCrudLive, :edit, %{})[:comments]
 
@@ -138,17 +138,23 @@ defmodule AshBackpex.LiveResource.TransformerTest do
 
       assert field.child_fields == [
                body: %{
-                 module: Backpex.Fields.Textarea,
+                 module: Backpex.Fields.Text,
                  label: "Body",
-                 rows: 4,
                  class: "flex-1"
                },
-               approved: %{
-                 module: Backpex.Fields.Boolean,
-                 label: "Approved"
+               author: %{
+                 module: AshBackpex.Fields.BelongsTo,
+                 label: "Author",
+                 display_field: :name,
+                 typeahead: true,
+                 typeahead_limit: 5,
+                 prompt: "Choose an author",
+                 options_query: field.child_fields[:author].options_query
                }
              ]
 
+      assert is_function(field.child_fields[:author].options_query, 2)
+      assert validated_field.child_fields[:author].module == AshBackpex.Fields.BelongsTo
       assert TestPostLive.fields()[:author].module == Backpex.Fields.BelongsTo
     end
 

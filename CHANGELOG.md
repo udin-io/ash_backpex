@@ -2,6 +2,15 @@
 
 <!-- changelog -->
 
+## [v0.1.12]
+
+### Updates
+
+- Derive InlineCRUD child fields recursively from the child Ash resource,
+  including field modules, relationship queries, and belongs-to typeaheads.
+- Keep repeated child field components and typeahead searches scoped to their
+  persistent row identity while entries are reordered.
+
 ## [v0.1.11]
 
 ### Fixes

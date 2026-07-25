@@ -154,19 +154,22 @@ defmodule DemoWeb.PostLive do
             class "inline-crud-comment-body"
           end
 
-          field :author, Backpex.Fields.BelongsTo do
+          field :author do
             label "Author"
             display_field :name
+            typeahead true
+            typeahead_limit 10
+            prompt "Choose an author"
             class "w-56"
           end
 
-          field :sentiment, Backpex.Fields.Select do
+          field :sentiment do
             label "Sentiment"
             options Positive: :positive, Neutral: :neutral, Critical: :critical
             class "w-40"
           end
 
-          field :approved, Backpex.Fields.Boolean do
+          field :approved do
             label "Approved"
             class "w-28"
           end
@@ -189,10 +192,12 @@ The demo gives the comment body its own row with two small CSS rules:
 }
 ```
 
-The child DSL accepts the same field options as top-level fields. This example
-uses a textarea, a relationship selector, a constrained select, and a boolean
-field. `live_resource DemoWeb.CommentLive` also lets Backpex link comments to
-their show pages in the read-only view.
+The child DSL accepts the same field options as top-level fields. AshBackpex
+derives child modules and relationship queries from the child resource, so the
+author typeahead above resolves `Demo.Blog.Comment.author`, not a relationship
+on the parent post. Explicit modules still override derivation, as shown by the
+textarea. `live_resource DemoWeb.CommentLive` also lets Backpex link comments
+to their show pages in the read-only view.
 
 For an Ash `has_many` relationship, AshBackpex supplies InlineCRUD's required
 `type: :assoc` option automatically. You can also set `type :assoc`
